@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Агент</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Агент">
+<meta name="theme-color" content="#004D59">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-512.png">
+<style>
+  :root{
+    --bg:#ffffff;                                   /* тёмный виджет → #0f1115 */
+    --safe-bottom:env(safe-area-inset-bottom, 0px);
+  }
+  html,body{
+    margin:0; padding:0; height:100%; width:100%;
+    background:var(--bg); overflow:hidden; overscroll-behavior:none;
+    -webkit-text-size-adjust:100%;
+  }
+  #wrap{
+    position:fixed; inset:0;
+    padding-bottom:var(--safe-bottom);              /* поле ввода не уедет под полоску Home */
+    background:var(--bg);
+  }
+  #wrap iframe{
+    display:block; width:100% !important; height:100% !important;
+    border:0 !important; border-radius:0 !important; margin:0; background:var(--bg);
+  }
+</style>
+</head>
+<body>
+  <div id="wrap">
+    <iframe
+      src="https://widget.aistudio.yandexcloud.net/embedded/aactka1fkpikhj820nda/chat?locale=ru&amp;accentColor=%23004D59"
+      title="AI Studio Chat"
+      allow="clipboard-write; microphone; autoplay"
+      scrolling="no"
+    ></iframe>
+  </div>
+<script>
+  // страховка: убираем width/height/radius из кода встройки, растягиваем на весь экран
+  var f = document.querySelector('#wrap iframe');
+  f.removeAttribute('width'); f.removeAttribute('height');
+  f.style.cssText = 'display:block;width:100%;height:100%;border:0;border-radius:0';
+  // не даём iOS зумить/прыгать при появлении клавиатуры
+  window.addEventListener('resize', function(){
+    document.documentElement.style.height = window.innerHeight + 'px';
+  });
+  document.addEventListener('gesturestart', function(e){ e.preventDefault(); });
+</script>
+</body>
+</html>

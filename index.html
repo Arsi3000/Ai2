@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Мой агент</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            min-height: 100dvh;
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+        .container {
+            width: 400px;
+            max-width: 100%;
+            padding: 24px;
+            background: #fff;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            border-radius: 12px;
+            text-align: center;
+        }
+        h1 { font-size: 1.4rem; margin-bottom: .5rem; color: #111; }
+        p  { color: #555; font-size: .95rem; margin-bottom: 1rem; }
+        .note {
+            font-size: .8rem;
+            color: #999;
+            background: #f3f4f6;
+            border-radius: 8px;
+            padding: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ваш персональный агент</h1>
+        <p>Задайте вопрос и получите ответ от ИИ-ассистента</p>
+        <div class="note">Чтобы чат открывался, страница должна открываться по http:// (не по file://)</div>
+    </div>
+
+    <!-- ОБЯЗАТЕЛЬНО: контейнер, в который виджет ставит кнопку/чат -->
+    <div id="yandex-ai-widget"></div>
+
+    <!-- Загрузчик виджета -->
+    <script src="https://widget.aistudio.yandexcloud.net/scripts/widget-loader.js?channel-id=aactka1fkpikhj820nda"></script>
+    <script>
+        // Убеждаемся, что виджет нашёл контейнер
+        window.addEventListener('DOMContentLoaded', function () {
+            if (document.getElementById('yandex-ai-widget')) {
+                console.log('Контейнер виджета найден');
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Мой агент</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            min-height: 100dvh;
+            background-color: #f8f9fa;
+            padding: 20px;
+            -webkit-text-size-adjust: 100%;
+            /* Плавность без "прыжков" */
+            overflow-anchor: none;
+        }
+        .container {
+            width: 400px;
+            max-width: 100%;
+            padding: 24px;
+            background: #fff;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            border-radius: 12px;
+            text-align: center;
+        }
+        h1 { font-size: 1.4rem; margin-bottom: .5rem; color: #111; }
+        p  { color: #555; font-size: .95rem; margin-bottom: 1rem; }
+        .note {
+            font-size: .8rem;
+            color: #999;
+            background: #f3f4f6;
+            border-radius: 8px;
+            padding: 8px;
+        }
+
+        /* Круглые кнопки: "вниз" и "вставить" */
+        .fab {
+            position: fixed;
+            right: calc(12px + env(safe-area-inset-right, 0px));
+            z-index: 2147483647;
+            border: none;
+            border-radius: 50%;
+            background: rgba(17,17,17,.72);
+            color: #fff;
+            font-size: 20px;
+            line-height: 44px;
+            width: 44px; height: 44px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,.25);
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+            cursor: pointer;
+            opacity: .92;
+        }
+        .fab.hidden { display: none; }
+
+        /* Кнопка "вставить текст" — над кнопкой "вниз" */
+        #paste-btn {
+            bottom: calc(148px + env(safe-area-inset-bottom, 0px));
+            font-size: 22px;
+        }
+        #paste-btn.copied { background: rgba(22,140,80,.85); }
+
+        /* Кнопка "вниз" */
+        #scroll-bottom-btn {
+            bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+        }
+
+        /* Подсказка, если вставка недоступна */
+        #hint {
+            position: fixed;
+            left: 50%;
+            bottom: calc(210px + env(safe-area-inset-bottom, 0px));
+            transform: translateX(-50%);
+            background: rgba(17,17,17,.85);
+            color: #fff;
+            font-size: .8rem;
+            padding: 8px 14px;
+            border-radius: 20px;
+            z-index: 2147483647;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .25s;
+            max-width: 90vw;
+            text-align: center;
+        }
+        #hint.show { opacity: 1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ваш персональный агент</h1>
+        <p>Задайте вопрос и получите ответ от ИИ-ассистента</p>
+        <div class="note">Чтобы чат открывался, страница должна открываться по http:// (не по file://)</div>
+    </div>
+
+    <!-- ОБЯЗАТЕЛЬНО: контейнер, в который виджет ставит кнопку/чат -->
+    <div id="yandex-ai-widget"></div>
+
+    <button id="paste-btn" class="fab" type="button" aria-label="Вставить" title="Вставить текст из буфера">&#128203;</button>
+    <button id="scroll-bottom-btn" class="fab" type="button" aria-label="Вниз" title="Вниз">&#8595;</button>
+    <div id="hint"></div>
+
+    <!-- Загрузчик виджета -->
+    <script src="https://widget.aistudio.yandexcloud.net/scripts/widget-loader.js?channel-id=aactka1fkpikhj820nda"></script>
+
+    <script>
+    (function () {
+        'use strict';
+
+        var supportsClipboardRead = !!(navigator.clipboard && navigator.clipboard.readText);
+
+        /* ---------- Поиск скролл-контейнеров (main document + shadow DOM + same-origin iframe) ---------- */
+        function isScrollable(el) {
+            if (!el || el.nodeType !== 1) return false;
+            var st;
+            try { st = getComputedStyle(el); } catch (e) { return false; }
+            if (!/(auto|scroll|overlay)/.test(st.overflowY)) return false;
+            return (el.scrollHeight - el.clientHeight) > 4;
+        }
+
+        function collect(root, out, deep) {
+            var els;
+            try { els = root.querySelectorAll('*'); } catch (e) { return; }
+            for (var i = 0; i < els.length; i++) {
+                var el = els[i];
+                if (isScrollable(el)) out.push(el);
+                if (deep && el.shadowRoot) collect(el.shadowRoot, out, deep);
+                if (deep && el.tagName === 'IFRAME') {
+                    try {
+                        var d = el.contentDocument;        // только same-origin
+                        if (d && d.body) collect(d, out, deep);
+                    } catch (e) {}
+                }
+            }
+        }
+
+        function scrollables() {
+            var out = [];
+            collect(document, out, true);
+            var se = document.scrollingElement || document.documentElement;
+            if (se) out.push(se);
+            out.push(document.documentElement);
+            if (document.body) out.push(document.body);
+            return out;
+        }
+
+        /* ---------- Прокрутка к последнему сообщению (только по инициативе пользователя) ---------- */
+        function goBottomToEnd() {
+            var list = scrollables();
+            for (var i = 0; i < list.length; i++) {
+                var el = list[i];
+                try {
+                    el.scrollTop = el.scrollHeight;
+                    if (el.lastElementChild && el.lastElementChild.scrollIntoView) {
+                        el.lastElementChild.scrollIntoView({ block: 'end' });
+                    }
+                } catch (e) {}
+            }
+            // Прокрутка самой страницы — мягко, чтобы не было рывка
+            try { window.scrollTo(0, document.documentElement.scrollHeight); } catch (e) {}
+        }
+
+        function scrollToBottom() {
+            goBottomToEnd();
+            [0, 60, 160].forEach(function (d) { setTimeout(goBottomToEnd, d); });
+        }
+        window.scrollToBottom = scrollToBottom;
+
+        /* ---------- Определяем, что пользователь внизу ---------- */
+        var stick = true;
+        function userIsNearBottom() {
+            var se = document.scrollingElement || document.documentElement;
+            if (!se) return true;
+            return (se.scrollHeight - se.scrollTop - se.clientHeight) < 200;
+        }
+        window.addEventListener('scroll', function () { stick = userIsNearBottom(); }, { passive: true });
+
+        /* ВАЖНО: убраны авто-прокрутки на resize / orientationchange / visualViewport,
+           из-за которых экран "прыгал" при открытии клавиатуры на телефоне. */
+
+        /* ---------- Кнопка "вниз" ---------- */
+        var btn = document.getElementById('scroll-bottom-btn');
+        var pasteBtn = document.getElementById('paste-btn');
+        var hint = document.getElementById('hint');
+
+        function syncBtn() {
+            if (!btn) return;
+            if (userIsNearBottom()) btn.classList.add('hidden');
+            else btn.classList.remove('hidden');
+        }
+        if (btn) {
+            btn.addEventListener('click', function (e) {
+                e.preventDefault();
+                stick = true;
+                scrollToBottom();
+            });
+        }
+        window.addEventListener('scroll', function () { syncBtn(); }, { passive: true });
+        setTimeout(syncBtn, 800);
+
+        /* ---------- Кнопка "Вставить" ---------- */
+        function showHint(text, ms) {
+            if (!hint) { return; }
+            hint.textContent = text;
+            hint.classList.add('show');
+            clearTimeout(showHint._t);
+            showHint._t = setTimeout(function () { hint.classList.remove('show'); }, ms || 2200);
+        }
+
+        // Ищем поле ввода чата: input / textarea / contenteditable (main + shadow DOM + iframe)
+        function findInput(root, deep) {
+            var sels = ['textarea', 'input[type="text"]', 'input[type="search"]', 'input:not([type])', '[contenteditable="true"]'];
+            for (var s = 0; s < sels.length; s++) {
+                var found;
+                try { found = root.querySelector(sels[s]); } catch (e) {}
+                if (found) return found;
+            }
+            if (!deep) return null;
+            var all;
+            try { all = root.querySelectorAll('*'); } catch (e) { return null; }
+            for (var i = 0; i < all.length; i++) {
+                var el = all[i];
+                if (el.shadowRoot) {
+                    var r = findInput(el.shadowRoot, true);
+                    if (r) return r;
+                }
+                if (el.tagName === 'IFRAME') {
+                    try {
+                        var d = el.contentDocument;
+                        if (d && d.body) {
+                            var r2 = findInput(d, true);
+                            if (r2) return r2;
+                        }
+                    } catch (e) {}
+                }
+            }
+            return null;
+        }
+
+        function insertText(el, text) {
+            el.focus();
+            if (el.isContentEditable) {
+                if (!document.execCommand('insertText', false, text)) {
+                    el.textContent += text;
+                }
+            } else {
+                var start = el.selectionStart != null ? el.selectionStart : el.value.length;
+                var end = el.selectionEnd != null ? el.selectionEnd : el.value.length;
+                var val = el.value || '';
+                el.value = val.slice(0, start) + text + val.slice(end);
+                el.selectionStart = el.selectionEnd = start + text.length;
+            }
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        if (pasteBtn) {
+            pasteBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                if (!supportsClipboardRead) {
+                    showHint('Браузер не даёт читать буфер. Нажми и удерживай поле ввода → «Вставить».', 3500);
+                    return;
+                }
+                navigator.clipboard.readText().then(function (text) {
+                    if (!text) { showHint('Буфер обмена пуст'); return; }
+                    var input = findInput(document, true);
+                    if (input) {
+                        insertText(input, text);
+                        showHint('Вставлено ✓');
+                    } else {
+                        // Чат в защищённом iframe — помочь не можем, но текст покажем
+                        showHint('Не удалось найти поле чата. Текст: ' + text.slice(0, 60), 3500);
+                    }
+                }).catch(function () {
+                    showHint('Нет доступа к буферу. Разреши доступ или вставь вручную.', 3200);
+                });
+            });
+        }
+
+        /* ---------- Первичное открытие ---------- */
+        window.addEventListener('DOMContentLoaded', function () {
+            if (document.getElementById('yandex-ai-widget')) {
+                console.log('Контейнер виджета найден');
+            }
+        });
+    })();
+    </script>
+</body>
+</html>
